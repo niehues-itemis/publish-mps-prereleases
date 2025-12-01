@@ -488,6 +488,16 @@ fun doesArtifactExistInRepository(): Boolean {
     }
 }
 
+// Create a provider for the licenses file content that's evaluated at execution time
+val licensesFileProvider = extractLicenses.flatMap { it.outputs.files.elements }.map { elements ->
+    val licensesFile = elements.firstOrNull()?.asFile
+    if (licensesFile != null && licensesFile.exists() && licensesFile.length() > 0) {
+        licensesFile.readLines()
+    } else {
+        emptyList()
+    }
+}
+
 val prereleasePublication = publishing.publications.create<MavenPublication>("mpsPrerelease") {
     groupId = mpsGroupId
     artifactId = mpsArtifactId
@@ -496,12 +506,13 @@ val prereleasePublication = publishing.publications.create<MavenPublication>("mp
     pom {
         withXml {
             val licensesNode = asNode().appendNode("licenses")
-            val licensesFile = layout.buildDirectory.file("extracted-licenses.txt").get().asFile
+            // Read licenses from the provider - this is lazily evaluated at execution time
+            val licenseLines = licensesFileProvider.get()
             
-            if (licensesFile.exists() && licensesFile.length() > 0) {
+            if (licenseLines.isNotEmpty()) {
                 // Collect all SPDX identifiers
                 val spdxIdentifiers = mutableListOf<String>()
-                licensesFile.readLines().forEach { line ->
+                licenseLines.forEach { line ->
                     if (line.isNotBlank()) {
                         val parts = line.split("|")
                         val licenseName = parts[0]
@@ -529,10 +540,11 @@ val prereleasePublication = publishing.publications.create<MavenPublication>("mp
 fun getenvRequired(name: String) =
     System.getenv(name) ?: throw GradleException("Environment variable '$name' must be set")
 
-// Ensure licenses are extracted before generating POM
+// Ensure proper task dependencies for publishing
 afterEvaluate {
     tasks.named("generatePomFileForMpsPrereleasePublication").configure {
-        dependsOn(extractLicenses)
+        // Add extractLicenses output as input to establish proper task dependency
+        inputs.files(extractLicenses)
         dependsOn(repackage)
     }
     
