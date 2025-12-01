@@ -337,6 +337,10 @@ fun toSpdxIdentifierSimple(licenseName: String): String? {
         "zlib/libpng", "Zlib", "zlib License" -> "Zlib"
         "LGPL 2.0", "LGPL-2.0", "GNU Library General Public License v2" -> "LGPL-2.0-only"
         "LGPL-3.0", "LGPL 3.0", "GNU Lesser General Public License v3.0" -> "LGPL-3.0-only"
+
+        // Unofficial licenses
+        "JDOM License" -> "LicenseRef-JDOM"
+        "codehaus" -> "Plexus"
         
         else -> licenseName // Return original license name if no mapping found
     }
