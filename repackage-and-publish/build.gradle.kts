@@ -109,18 +109,21 @@ val prereleasePublication = publishing.publications.create<MavenPublication>("mp
             
             // Find the third-party-libraries.json file in the downloaded ZIP
             val downloadedFile = download.get().outputFiles.single()
+            if (!downloadedFile.exists()) {
+                throw GradleException("Downloaded ZIP file does not exist: ${downloadedFile.absolutePath}")
+            }
             val zipFile = zipTree(downloadedFile)
-            val thirdPartyJsonFile = zipFile.files.find { it.name == "third-party-libraries.json" && it.path.contains("license") }
+            val thirdPartyJsonFile = zipFile.files.find { 
+                it.name == "third-party-libraries.json" && 
+                it.toPath().any { segment -> segment.toString().equals("license", ignoreCase = true) }
+            }
             
             if (thirdPartyJsonFile != null) {
                 // Instantiate the appropriate provider based on the file format
                 val licenseProvider = JsonLicenseProvider(thirdPartyJsonFile)
                 SpdxLicenseMapper.addLicensesToPom(licensesNode, licenseProvider)
             } else {
-                logger.warn("third-party-libraries.json not found in downloaded ZIP")
-                val licenseNode = licensesNode.appendNode("license")
-                licenseNode.appendNode("name", "Various")
-                licenseNode.appendNode("comments", "This artifact bundles various third-party libraries under different licenses")
+                throw GradleException("third-party-libraries.json not found in downloaded ZIP - cannot determine licenses")
             }
         }
     }
