@@ -489,9 +489,9 @@ fun doesArtifactExistInRepository(): Boolean {
 }
 
 // Create a provider for the licenses file content that's evaluated at execution time
-val licensesFileProvider = extractLicenses.flatMap { it.outputs.files.elements }.map { elements ->
-    val licensesFile = elements.firstOrNull()?.asFile
-    if (licensesFile != null && licensesFile.exists() && licensesFile.length() > 0) {
+val licensesFileProvider = extractLicenses.map { task ->
+    val licensesFile = task.outputs.files.singleFile
+    if (licensesFile.exists() && licensesFile.length() > 0) {
         licensesFile.readLines()
     } else {
         emptyList()
@@ -544,7 +544,7 @@ fun getenvRequired(name: String) =
 afterEvaluate {
     tasks.named("generatePomFileForMpsPrereleasePublication").configure {
         // Add extractLicenses output as input to establish proper task dependency
-        inputs.files(extractLicenses)
+        inputs.file(extractLicenses.map { it.outputs.files.singleFile })
         dependsOn(repackage)
     }
     
