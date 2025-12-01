@@ -342,7 +342,7 @@ fun toSpdxIdentifierSimple(licenseName: String): String? {
         "JDOM License" -> "LicenseRef-JDOM"
         "codehaus" -> "Plexus"
         
-        else -> licenseName // Return original license name if no mapping found
+        else -> null // Return null if no mapping found
     }
 }
 
