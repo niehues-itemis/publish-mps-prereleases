@@ -1,6 +1,6 @@
 # SPDX License Mapper
 
-A Kotlin utility for mapping common license names to their official SPDX identifiers and generating Maven POM license sections.
+A Kotlin utility for mapping common license names to their official SPDX identifiers and generating Maven POM license sections. Features a flexible provider architecture for reading license information from various file formats.
 
 ## Overview
 
@@ -9,7 +9,20 @@ This utility provides comprehensive mapping of license names to SPDX identifiers
 - License exceptions (Classpath, GCC Runtime Library, etc.)
 - SPDX license expressions with the `WITH` operator
 - Validation of license mappings
-- Direct POM XML generation from JSON license files
+- Flexible provider architecture for different file formats
+- Direct POM XML generation with SPDX expressions
+
+## Architecture
+
+### Provider-Based Design
+
+The utility uses a provider pattern to separate license data extraction from SPDX mapping:
+
+1. **`LicenseProvider` Interface**: Extracts raw license data from any source (JSON, XML, YAML, etc.)
+2. **`LibraryLicense` Data Class**: Represents a library with its license information
+3. **`SpdxLicenseMapper`**: Centralized SPDX mapping logic
+
+This design makes it easy to support new file formats without duplicating SPDX mapping logic.
 
 ## Usage in Gradle
 
@@ -29,16 +42,33 @@ val spdxId = SpdxLicenseMapper.toSpdxIdentifier("Apache 2.0")
 // Map license with exception
 val gplWithClasspath = SpdxLicenseMapper.toSpdxIdentifier("GPL 2.0 + Classpath")
 // Returns: "GPL-2.0-only WITH Classpath-exception-2.0"
+```
 
-// Extract licenses from JSON file
+### 3. Using License Providers
+
+Choose or create a provider based on your file format:
+
+```kotlin
+import JsonLicenseProvider
+import LibraryLicense
+import SpdxLicenseMapper
+
+// Using the built-in JSON provider
 val jsonFile = file("third-party-libraries.json")
-val licenses = SpdxLicenseMapper.extractLicensesFromJson(jsonFile)
+val provider = JsonLicenseProvider(jsonFile)
+
+// Get raw library licenses
+val libraryLicenses = provider.getLibraryLicenses()
+// Returns: List<LibraryLicense>
+
+// Map to SPDX identifiers
+val spdxLicenses = SpdxLicenseMapper.mapToSpdxLicenses(libraryLicenses)
 // Returns: Map<String, String?> mapping SPDX IDs to URLs
 ```
 
-### 3. Generate POM License Section from JSON
+### 4. Generate POM License Section
 
-The most convenient way to add SPDX licenses to your Maven POM:
+The recommended way to add SPDX licenses to your Maven POM:
 
 ```kotlin
 publishing {
@@ -49,20 +79,30 @@ publishing {
             pom {
                 withXml {
                     val licensesNode = asNode().appendNode("licenses")
-                    val jsonFile = layout.buildDirectory.file("third-party-libraries.json").get().asFile
+                    val jsonFile = file("third-party-libraries.json")
                     
-                    // Reads JSON, validates licenses, and generates SPDX expression
-                    SpdxLicenseMapper.addLicensesToPomFromJson(licensesNode, jsonFile)
+                    // Instantiate the appropriate provider for your file format
+                    val licenseProvider = JsonLicenseProvider(jsonFile)
+                    
+                    // Add licenses to POM (handles SPDX mapping and XML generation)
+                    SpdxLicenseMapper.addLicensesToPom(licensesNode, licenseProvider)
                 }
             }
         }
     }
 }
+```
 
-// Ensure JSON file is available before POM generation
-afterEvaluate {
-    tasks.named("generatePomFileForMyPublicationPublication").configure {
-        dependsOn(downloadTask) // Your task that creates the JSON file
+**Convenience method for JSON files:**
+
+```kotlin
+pom {
+    withXml {
+        val licensesNode = asNode().appendNode("licenses")
+        val jsonFile = file("third-party-libraries.json")
+        
+        // Shortcut that uses JsonLicenseProvider internally
+        SpdxLicenseMapper.addLicensesToPomFromJson(licensesNode, jsonFile)
     }
 }
 ```
@@ -79,9 +119,9 @@ This will generate a POM with a single license entry containing an SPDX expressi
 </licenses>
 ```
 
-### 4. Example JSON Format
+### 5. JSON File Format
 
-The `extractLicensesFromJson` and `addLicensesToPomFromJson` functions expect the following JSON structure:
+The `JsonLicenseProvider` expects the following structure:
 
 ```json
 [
@@ -144,21 +184,68 @@ No SPDX identifier found for the following licenses:
 
 ### POM Generation Errors
 
-When using `addLicensesToPomFromJson()`, the following errors will be thrown:
+When using `addLicensesToPom()` or `addLicensesToPomFromJson()`, the following errors will be thrown:
 
-- **JSON file not found**: 
+- **JSON file not found** (JsonLicenseProvider): 
   ```
-  License JSON file not found: /path/to/file.json. 
-  Please ensure the download task has completed successfully.
-  ```
-
-- **No licenses in JSON**: 
-  ```
-  No licenses found in JSON file: /path/to/file.json. 
-  The file may be empty or malformed.
+  License JSON file not found: /path/to/file.json
   ```
 
-These errors ensure that POM generation fails early if license information is missing, preventing publication of artifacts without proper license metadata.
+- **No licenses found**: 
+  ```
+  No licenses found. The license source may be empty or malformed.
+  ```
+
+- **Unmapped licenses** (from `mapToSpdxLicenses()`):
+  ```
+  No SPDX identifier found for the following licenses:
+    - library-name: Custom License
+    - another-lib: Proprietary License
+  ```
+
+These errors ensure that POM generation fails early if license information is missing or invalid, preventing publication of artifacts without proper license metadata.
+
+## Implementing Custom Providers
+
+To support a new file format, implement the `LicenseProvider` interface:
+
+```kotlin
+class XmlLicenseProvider(private val xmlFile: File) : LicenseProvider {
+    override fun getLibraryLicenses(): List<LibraryLicense> {
+        if (!xmlFile.exists()) {
+            throw GradleException("XML file not found: ${xmlFile.absolutePath}")
+        }
+        
+        // Parse your XML format and extract license information
+        val libraries = mutableListOf<LibraryLicense>()
+        
+        // ... your XML parsing logic ...
+        
+        return libraries
+    }
+}
+```
+
+Then use it in your build script:
+
+```kotlin
+pom {
+    withXml {
+        val licensesNode = asNode().appendNode("licenses")
+        val xmlFile = file("licenses.xml")
+        
+        // Use your custom provider
+        val licenseProvider = XmlLicenseProvider(xmlFile)
+        SpdxLicenseMapper.addLicensesToPom(licensesNode, licenseProvider)
+    }
+}
+```
+
+**Key Benefits:**
+- SPDX mapping logic is centralized in `SpdxLicenseMapper`
+- No need to duplicate validation or mapping code
+- Easy to test and maintain
+- Consistent error handling across all providers
 
 ## Using in Other Projects
 
@@ -171,6 +258,8 @@ Alternatively, you can reference it from a shared location using Gradle's `apply
 
 ## Extending the Mapper
 
+### Adding New License Mappings
+
 To add new license mappings:
 
 1. Open `SpdxLicenseMapper.kt`
@@ -179,6 +268,42 @@ To add new license mappings:
    ```kotlin
    "License Name", "Alternative Name" -> "SPDX-Identifier"
    ```
+
+### Creating Custom Providers
+
+See the "Implementing Custom Providers" section above for details on supporting new file formats.
+
+## API Reference
+
+### Core Functions
+
+- **`toSpdxIdentifier(licenseName: String): String?`**  
+  Converts a license name to its SPDX identifier. Handles both simple licenses and expressions with exceptions.
+
+- **`mapToSpdxLicenses(libraryLicenses: List<LibraryLicense>): Map<String, String?>`**  
+  Centralized function to map a list of library licenses to SPDX identifiers. Throws exception for unmapped licenses.
+
+- **`addLicensesToPom(licensesNode: Node, provider: LicenseProvider)`**  
+  Adds SPDX license information to a Maven POM XML node using any LicenseProvider.
+
+- **`addLicensesToPomFromJson(licensesNode: Node, jsonFile: File)`**  
+  Convenience method that uses `JsonLicenseProvider` internally.
+
+### Data Classes
+
+- **`LibraryLicense(libraryName: String, licenseName: String, licenseUrl: String?)`**  
+  Represents a library with its raw license information.
+
+### Interfaces
+
+- **`LicenseProvider`**  
+  - `getLibraryLicenses(): List<LibraryLicense>` - Extracts raw license data from a source.
+
+### Built-in Providers
+
+- **`JsonLicenseProvider(jsonFile: File)`**  
+  Reads license information from JSON files with the structure shown above.
+
 
 ## References
 

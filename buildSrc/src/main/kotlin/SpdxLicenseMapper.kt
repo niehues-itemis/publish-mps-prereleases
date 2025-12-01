@@ -3,6 +3,55 @@ import org.gradle.api.GradleException
 import java.io.File
 
 /**
+ * Represents a library with its license information.
+ */
+data class LibraryLicense(
+    val libraryName: String,
+    val licenseName: String,
+    val licenseUrl: String? = null
+)
+
+/**
+ * Interface for providing raw license information from various sources.
+ * Implementations should only extract the raw data - SPDX mapping is handled centrally.
+ */
+interface LicenseProvider {
+    /**
+     * Extracts raw license information from the source.
+     * @return List of library licenses with their original (non-SPDX) license names
+     * @throws GradleException if licenses cannot be extracted
+     */
+    fun getLibraryLicenses(): List<LibraryLicense>
+}
+
+/**
+ * License provider that reads from a JSON file with the structure:
+ * [{"name": "lib-name", "license": "Apache 2.0", "licenseUrl": "https://..."}]
+ */
+class JsonLicenseProvider(private val jsonFile: File) : LicenseProvider {
+    override fun getLibraryLicenses(): List<LibraryLicense> {
+        if (!jsonFile.exists()) {
+            throw GradleException("License JSON file not found: ${jsonFile.absolutePath}")
+        }
+        
+        val slurper = JsonSlurper()
+        val libraries = slurper.parse(jsonFile) as List<Map<String, Any?>>
+        
+        return libraries.mapNotNull { lib ->
+            val name = lib["name"] as? String
+            val license = (lib["license"] as? String)?.trim()
+            val licenseUrl = lib["licenseUrl"] as? String
+            
+            if (!name.isNullOrEmpty() && !license.isNullOrEmpty()) {
+                LibraryLicense(name, license, licenseUrl)
+            } else {
+                null
+            }
+        }
+    }
+}
+
+/**
  * Utility class for mapping license names to SPDX identifiers.
  * 
  * This class provides functionality to:
@@ -363,42 +412,23 @@ object SpdxLicenseMapper {
     }
     
     /**
-     * Extracts licenses from a JSON file and converts them to SPDX identifiers.
+     * Converts a list of library licenses to SPDX identifiers.
      * 
-     * Expected JSON format:
-     * ```json
-     * [
-     *   {
-     *     "license": "Apache 2.0",
-     *     "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0"
-     *   },
-     *   ...
-     * ]
-     * ```
-     * 
-     * @param jsonFile The JSON file containing license information
-     * @return A map of SPDX identifiers to their URLs
-     * @throws GradleException if any licenses cannot be mapped to SPDX identifiers
+     * @param libraryLicenses List of library licenses with original license names
+     * @return Map of SPDX identifiers to their URLs (URL may be null)
+     * @throws GradleException if any license cannot be mapped to SPDX
      */
-    fun extractLicensesFromJson(jsonFile: File): Map<String, String?> {
-        val jsonSlurper = JsonSlurper()
-        val libraries = jsonSlurper.parse(jsonFile) as List<Map<String, Any?>>
-        
+    fun mapToSpdxLicenses(libraryLicenses: List<LibraryLicense>): Map<String, String?> {
         val licenseMap = mutableMapOf<String, String?>()
         val unmappedLicenses = mutableListOf<String>()
         
-        libraries.forEach { lib ->
-            val licenseName = (lib["license"] as? String)?.trim()
-            val licenseUrl = lib["licenseUrl"] as? String
-            
-            if (!licenseName.isNullOrEmpty()) {
-                val spdxIdentifier = toSpdxIdentifier(licenseName)
-                if (spdxIdentifier == null) {
-                    unmappedLicenses.add(licenseName)
-                } else {
-                    if (!licenseMap.containsKey(spdxIdentifier)) {
-                        licenseMap[spdxIdentifier] = licenseUrl
-                    }
+        libraryLicenses.forEach { lib ->
+            val spdxIdentifier = toSpdxIdentifier(lib.licenseName)
+            if (spdxIdentifier == null) {
+                unmappedLicenses.add("${lib.libraryName}: ${lib.licenseName}")
+            } else {
+                if (!licenseMap.containsKey(spdxIdentifier)) {
+                    licenseMap[spdxIdentifier] = lib.licenseUrl
                 }
             }
         }
@@ -411,23 +441,22 @@ object SpdxLicenseMapper {
     }
     
     /**
-     * Adds SPDX license information to a Maven POM XML node by reading directly from JSON.
+     * Adds SPDX license information to a Maven POM XML node using a LicenseProvider.
      * Creates a single license entry with all licenses combined as an SPDX expression using AND.
      * 
      * @param licensesNode The XML node where license information should be added
-     * @param jsonFile The third-party-libraries.json file to extract licenses from
-     * @throws GradleException if the JSON file doesn't exist or contains no licenses
+     * @param provider The LicenseProvider to extract licenses from
+     * @throws GradleException if no licenses can be extracted or mapped
      */
-    fun addLicensesToPomFromJson(licensesNode: groovy.util.Node, jsonFile: File) {
-        if (!jsonFile.exists()) {
-            throw GradleException("License JSON file not found: ${jsonFile.absolutePath}. Please ensure the download task has completed successfully.")
+    fun addLicensesToPom(licensesNode: groovy.util.Node, provider: LicenseProvider) {
+        val libraryLicenses = provider.getLibraryLicenses()
+        
+        if (libraryLicenses.isEmpty()) {
+            throw GradleException("No licenses found. The license source may be empty or malformed.")
         }
         
-        val licenses = extractLicensesFromJson(jsonFile)
-        
-        if (licenses.isEmpty()) {
-            throw GradleException("No licenses found in JSON file: ${jsonFile.absolutePath}. The file may be empty or malformed.")
-        }
+        // Map to SPDX identifiers
+        val licenses = mapToSpdxLicenses(libraryLicenses)
         
         // Create SPDX expression by joining with AND
         val spdxExpression = licenses.keys.sorted().joinToString(" AND ")
@@ -436,5 +465,17 @@ object SpdxLicenseMapper {
         licenseNode.appendNode("name", spdxExpression)
         licenseNode.appendNode("url", "https://spdx.org/licenses/")
         licenseNode.appendNode("comments", "SPDX License Expression combining ${licenses.size} licenses. All listed licenses apply simultaneously")
+    }
+    
+    /**
+     * Adds SPDX license information to a Maven POM XML node by reading directly from JSON.
+     * Convenience method that uses JsonLicenseProvider internally.
+     * 
+     * @param licensesNode The XML node where license information should be added
+     * @param jsonFile The third-party-libraries.json file to extract licenses from
+     * @throws GradleException if the JSON file doesn't exist or contains no licenses
+     */
+    fun addLicensesToPomFromJson(licensesNode: groovy.util.Node, jsonFile: File) {
+        addLicensesToPom(licensesNode, JsonLicenseProvider(jsonFile))
     }
 }

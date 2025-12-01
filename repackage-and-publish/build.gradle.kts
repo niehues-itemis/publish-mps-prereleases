@@ -113,7 +113,9 @@ val prereleasePublication = publishing.publications.create<MavenPublication>("mp
             val thirdPartyJsonFile = zipFile.files.find { it.name == "third-party-libraries.json" && it.path.contains("license") }
             
             if (thirdPartyJsonFile != null) {
-                SpdxLicenseMapper.addLicensesToPomFromJson(licensesNode, thirdPartyJsonFile)
+                // Instantiate the appropriate provider based on the file format
+                val licenseProvider = JsonLicenseProvider(thirdPartyJsonFile)
+                SpdxLicenseMapper.addLicensesToPom(licensesNode, licenseProvider)
             } else {
                 logger.warn("third-party-libraries.json not found in downloaded ZIP")
                 val licenseNode = licensesNode.appendNode("license")
@@ -127,13 +129,8 @@ val prereleasePublication = publishing.publications.create<MavenPublication>("mp
 fun getenvRequired(name: String) =
     System.getenv(name) ?: throw GradleException("Environment variable '$name' must be set")
 
-// Ensure download is complete before generating POM (since we read JSON directly)
+// Ensure repackage waits for download to complete
 afterEvaluate {
-    tasks.named("generatePomFileForMpsPrereleasePublication").configure {
-        dependsOn(tasks.named("download"))
-        dependsOn(repackage)
-    }
-    
     tasks.named("publishMpsPrereleasePublicationToMavenRepository").configure {
         dependsOn(repackage)
     }
