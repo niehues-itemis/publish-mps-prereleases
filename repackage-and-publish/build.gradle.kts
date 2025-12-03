@@ -101,13 +101,15 @@ fun doesArtifactExistInRepository(): Boolean {
 val prereleasePublication = publishing.publications.create<MavenPublication>("mpsPrerelease") {
     groupId = mpsGroupId
     artifactId = mpsArtifactId
-    artifact(repackage)
+    
+    // Use Provider API - Gradle will automatically track the dependency
+    artifact(repackage.flatMap { it.archiveFile })
     
     pom {
         withXml {
             val licensesNode = asNode().appendNode("licenses")
             
-            // Find the third-party-libraries.json file in the downloaded ZIP
+            // Use Provider API to get the downloaded file
             val downloadedFile = download.get().outputFiles.single()
             if (!downloadedFile.exists()) {
                 throw GradleException("Downloaded ZIP file does not exist: ${downloadedFile.absolutePath}")
@@ -119,7 +121,6 @@ val prereleasePublication = publishing.publications.create<MavenPublication>("mp
             }
             
             if (thirdPartyJsonFile != null) {
-                // Instantiate the appropriate provider based on the file format
                 val licenseProvider = JsonLicenseProvider(thirdPartyJsonFile)
                 SpdxLicenseMapper.addLicensesToPom(licensesNode, licenseProvider)
             } else {
@@ -132,12 +133,7 @@ val prereleasePublication = publishing.publications.create<MavenPublication>("mp
 fun getenvRequired(name: String) =
     System.getenv(name) ?: throw GradleException("Environment variable '$name' must be set")
 
-// Ensure repackage waits for download to complete
-afterEvaluate {
-    tasks.named("publishMpsPrereleasePublicationToMavenRepository").configure {
-        dependsOn(repackage)
-    }
-}
+// afterEvaluate block removed - Provider API handles dependencies automatically!
 
 tasks.publish {
     doLast {
