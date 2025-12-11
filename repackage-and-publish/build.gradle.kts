@@ -2,11 +2,14 @@ import de.undercouch.gradle.tasks.download.Download
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.*
-import SpdxLicenseMapper
+import com.itemis.gradle.spdx.SpdxLicenseMapper
+import com.itemis.gradle.spdx.JsonLicenseProvider
+
 
 plugins {
     `maven-publish`
     id("de.undercouch.download") version "5.5.0"
+    id("spdx-license-mapping") version "1.0.0-SNAPSHOT"
 }
 
 val mpsGroupId = "com.jetbrains.mps"
