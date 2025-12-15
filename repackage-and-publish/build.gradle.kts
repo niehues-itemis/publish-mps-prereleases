@@ -17,7 +17,7 @@ val mpsGroupId = "com.jetbrains.mps"
 val mpsArtifactId = "mps-prerelease"
 
 // Third-party license file name
-const val THIRD_PARTY_LICENSE_FILE = "third-party-libraries.json"
+val THIRD_PARTY_LICENSE_FILE = "third-party-libraries.json"
 
 version = object {
     override fun toString(): String {

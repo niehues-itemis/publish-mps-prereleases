@@ -6,8 +6,8 @@
 set -e  # Exit on error
 
 # Set test environment variables
-export ARTIFACT_VERSION="${ARTIFACT_VERSION:-253.28294.10019}"
-export ARTIFACT_BUILD_ID="${ARTIFACT_BUILD_ID:-5690548}"
+export ARTIFACT_VERSION="${ARTIFACT_VERSION:-253.28294.10118}"
+export ARTIFACT_BUILD_ID="${ARTIFACT_BUILD_ID:-5736255}"
 
 echo "=================================="
 echo "Testing repackage-and-publish"
