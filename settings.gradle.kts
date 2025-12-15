@@ -1,14 +1,6 @@
 pluginManagement {
     repositories {
-        maven("https://artifacts.itemis.cloud/repository/gradle-plugins/") {
-            val userName = providers.gradleProperty("artifacts.itemis.cloud.user").orNull
-            if (userName != null) {
-                credentials {
-                    username = userName
-                    password = providers.gradleProperty("artifacts.itemis.cloud.pw").orNull
-                }
-            }
-        }
+        maven("https://artifacts.itemis.cloud/repository/gradle-plugins/") 
         gradlePluginPortal()
     }
 }

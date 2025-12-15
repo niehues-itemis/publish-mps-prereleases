@@ -9,7 +9,7 @@ import com.itemis.gradle.spdx.JsonLicenseProvider
 plugins {
     `maven-publish`
     id("de.undercouch.download") version "5.5.0"
-    id("spdx-license-mapping") version "1.0.0-SNAPSHOT"
+    id("spdx-license-mapping") version "1.0.0"
 }
 
 val mpsGroupId = "com.jetbrains.mps"

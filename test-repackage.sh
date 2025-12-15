@@ -18,7 +18,7 @@ echo ""
 
 # Run complete publication to local Maven repository
 echo "Running complete publication to local Maven repository..."
-./gradlew :repackage-and-publish:publishToMavenLocal
+./gradlew :repackage-and-publish:publishToMavenLocal --refresh-dependencies --info
 
 echo ""
 echo "=================================="
