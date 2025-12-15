@@ -57,12 +57,9 @@ val repackage by tasks.registering(Zip::class) {
 }
 
 val extractThirdPartyLicenses by tasks.registering(Copy::class) {
-    dependsOn(download)
+    val downloadedFile = download.map { it.outputFiles.single() }
     
-    from(provider {
-        val downloadedFile = download.get().outputFiles.single()
-        zipTree(downloadedFile)
-    }) {
+    from(downloadedFile.map { zipTree(it) }) {
         include("**/license/third-party-libraries.json")
         eachFile {
             // Flatten the directory structure
