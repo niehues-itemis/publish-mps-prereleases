@@ -63,7 +63,7 @@ val extractThirdPartyLicenses by tasks.registering(Copy::class) {
     val downloadedFile = download.map { it.outputFiles.single() }
     
     from(downloadedFile.map { zipTree(it) }) {
-        include("**/license/$THIRD_PARTY_LICENSE_FILE")
+        include("**/$THIRD_PARTY_LICENSE_FILE")
         eachFile {
             // Flatten the directory structure
             path = name
@@ -73,15 +73,12 @@ val extractThirdPartyLicenses by tasks.registering(Copy::class) {
     includeEmptyDirs = false
     
     doLast {
-        val outputFile = layout.buildDirectory.file("licenses/$THIRD_PARTY_LICENSE_FILE").get().asFile
+        val outputFile = destinationDir.resolve(THIRD_PARTY_LICENSE_FILE)
         if (!outputFile.exists()) {
             throw GradleException("Failed to extract $THIRD_PARTY_LICENSE_FILE from downloaded ZIP - file not found in archive")
         }
     }
 }
-
-// Define the extracted license file location
-val extractedLicenseFile = layout.buildDirectory.file("licenses/$THIRD_PARTY_LICENSE_FILE")
 
 fun getArtifactDownloadUrl(): String {
     val artifactBuildId = getenvRequired("ARTIFACT_BUILD_ID")
@@ -141,7 +138,8 @@ val prereleasePublication = publishing.publications.create<MavenPublication>("mp
             val licensesNode = asNode().appendNode("licenses")
             
             // Use the extracted license file from the extractThirdPartyLicenses task
-            val thirdPartyJsonFile = extractedLicenseFile.get().asFile
+            // The file is accessed from the task's output directory
+            val thirdPartyJsonFile = extractThirdPartyLicenses.get().destinationDir.resolve(THIRD_PARTY_LICENSE_FILE)
             
             if (!thirdPartyJsonFile.exists()) {
                 throw GradleException("third-party-libraries.json not found at ${thirdPartyJsonFile.absolutePath} - cannot determine licenses")
