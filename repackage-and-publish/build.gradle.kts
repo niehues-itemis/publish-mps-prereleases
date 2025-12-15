@@ -4,6 +4,7 @@ import java.net.URL
 import java.util.*
 import com.itemis.gradle.spdx.SpdxLicenseMapper
 import com.itemis.gradle.spdx.JsonLicenseProvider
+import org.gradle.api.publish.maven.tasks.GenerateMavenPom
 
 
 plugins {
@@ -52,6 +53,23 @@ val repackage by tasks.registering(Zip::class) {
         this.path = this.sourcePath.substringAfter('/')
     }
 
+    includeEmptyDirs = false
+}
+
+val extractThirdPartyLicenses by tasks.registering(Copy::class) {
+    dependsOn(download)
+    
+    from(provider {
+        val downloadedFile = download.get().outputFiles.single()
+        zipTree(downloadedFile)
+    }) {
+        include("**/license/third-party-libraries.json")
+        eachFile {
+            // Flatten the directory structure
+            path = name
+        }
+    }
+    into(layout.buildDirectory.dir("licenses"))
     includeEmptyDirs = false
 }
 
@@ -112,29 +130,27 @@ val prereleasePublication = publishing.publications.create<MavenPublication>("mp
         withXml {
             val licensesNode = asNode().appendNode("licenses")
             
-            // Use Provider API to get the downloaded file
-            val downloadedFile = download.get().outputFiles.single()
-            if (!downloadedFile.exists()) {
-                throw GradleException("Downloaded ZIP file does not exist: ${downloadedFile.absolutePath}")
-            }
-            val zipFile = zipTree(downloadedFile)
-            val thirdPartyJsonFile = zipFile.files.find { 
-                it.name == "third-party-libraries.json" && 
-                it.toPath().any { segment -> segment.toString().equals("license", ignoreCase = true) }
+            // Use the extracted license file from the extractThirdPartyLicenses task
+            val licenseDir = layout.buildDirectory.dir("licenses").get().asFile
+            val thirdPartyJsonFile = licenseDir.resolve("third-party-libraries.json")
+            
+            if (!thirdPartyJsonFile.exists()) {
+                throw GradleException("third-party-libraries.json not found at ${thirdPartyJsonFile.absolutePath} - cannot determine licenses")
             }
             
-            if (thirdPartyJsonFile != null) {
-                val licenseProvider = JsonLicenseProvider(thirdPartyJsonFile)
-                SpdxLicenseMapper.addLicensesToPom(licensesNode, licenseProvider)
-            } else {
-                throw GradleException("third-party-libraries.json not found in downloaded ZIP - cannot determine licenses")
-            }
+            val licenseProvider = JsonLicenseProvider(thirdPartyJsonFile)
+            SpdxLicenseMapper.addLicensesToPom(licensesNode, licenseProvider)
         }
     }
 }
 
 fun getenvRequired(name: String) =
     System.getenv(name) ?: throw GradleException("Environment variable '$name' must be set")
+
+// Ensure license extraction happens before POM generation
+tasks.withType<GenerateMavenPom>().configureEach {
+    dependsOn(extractThirdPartyLicenses)
+}
 
 // afterEvaluate block removed - Provider API handles dependencies automatically!
 
