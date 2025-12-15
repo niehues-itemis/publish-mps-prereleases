@@ -16,6 +16,9 @@ plugins {
 val mpsGroupId = "com.jetbrains.mps"
 val mpsArtifactId = "mps-prerelease"
 
+// Third-party license file name
+const val THIRD_PARTY_LICENSE_FILE = "third-party-libraries.json"
+
 version = object {
     override fun toString(): String {
         return getenvRequired("ARTIFACT_VERSION")
@@ -60,7 +63,7 @@ val extractThirdPartyLicenses by tasks.registering(Copy::class) {
     val downloadedFile = download.map { it.outputFiles.single() }
     
     from(downloadedFile.map { zipTree(it) }) {
-        include("**/license/third-party-libraries.json")
+        include("**/license/$THIRD_PARTY_LICENSE_FILE")
         eachFile {
             // Flatten the directory structure
             path = name
@@ -68,10 +71,17 @@ val extractThirdPartyLicenses by tasks.registering(Copy::class) {
     }
     into(layout.buildDirectory.dir("licenses"))
     includeEmptyDirs = false
+    
+    doLast {
+        val outputFile = layout.buildDirectory.file("licenses/$THIRD_PARTY_LICENSE_FILE").get().asFile
+        if (!outputFile.exists()) {
+            throw GradleException("Failed to extract $THIRD_PARTY_LICENSE_FILE from downloaded ZIP - file not found in archive")
+        }
+    }
 }
 
 // Define the extracted license file location
-val extractedLicenseFile = layout.buildDirectory.file("licenses/third-party-libraries.json")
+val extractedLicenseFile = layout.buildDirectory.file("licenses/$THIRD_PARTY_LICENSE_FILE")
 
 fun getArtifactDownloadUrl(): String {
     val artifactBuildId = getenvRequired("ARTIFACT_BUILD_ID")
