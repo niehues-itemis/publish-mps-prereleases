@@ -70,6 +70,9 @@ val extractThirdPartyLicenses by tasks.registering(Copy::class) {
     includeEmptyDirs = false
 }
 
+// Define the extracted license file location
+val extractedLicenseFile = layout.buildDirectory.file("licenses/third-party-libraries.json")
+
 fun getArtifactDownloadUrl(): String {
     val artifactBuildId = getenvRequired("ARTIFACT_BUILD_ID")
     return "https://teamcity.jetbrains.com/guestAuth/app/rest/builds/id:${artifactBuildId}/artifacts/content/MPS-${version}.zip"
@@ -128,8 +131,7 @@ val prereleasePublication = publishing.publications.create<MavenPublication>("mp
             val licensesNode = asNode().appendNode("licenses")
             
             // Use the extracted license file from the extractThirdPartyLicenses task
-            val licenseDir = layout.buildDirectory.dir("licenses").get().asFile
-            val thirdPartyJsonFile = licenseDir.resolve("third-party-libraries.json")
+            val thirdPartyJsonFile = extractedLicenseFile.get().asFile
             
             if (!thirdPartyJsonFile.exists()) {
                 throw GradleException("third-party-libraries.json not found at ${thirdPartyJsonFile.absolutePath} - cannot determine licenses")
